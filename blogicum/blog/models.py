@@ -1,11 +1,11 @@
-import blog.utils
-from blog.managers import PostsManager
-from core.models import PublishedModel
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.urls import reverse
 
+import blog.utils
+from blog.managers import PostsManager
 import blogicum.constans as const
+from core.models import PublishedModel
 
 User = get_user_model()
 
@@ -102,13 +102,16 @@ class Post(PublishedModel):
         return blog.utils.get_first_words(self.title)
 
     def get_absolute_url(self):
-        return reverse('blog:profile', kwargs={'slug': self.author.username})
+        return reverse(
+            'blog:profile',
+            kwargs={'username': self.author.username}
+        )
 
     def comment_count(self):
-        return self.comments.count()
+        return Comment.objects.count()
 
 
-class Comment(models.Model):
+class Comment(PublishedModel):
     text = models.TextField('Текст комментария')
     author = models.ForeignKey(
         User,
@@ -123,7 +126,9 @@ class Comment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta(PublishedModel.Meta):
+        verbose_name = 'комментарий'
+        verbose_name_plural = 'Комментарии'
         ordering = ('created_at', 'text')
 
-        def __str__(self):
-            return blog.utils.get_first_words(self.text)
+    def __str__(self):
+        return blog.utils.get_first_words(self.text)

@@ -5,7 +5,7 @@ class PublishedModel(models.Model):
     is_published = models.BooleanField(
         default=True,
         blank=False,
-        help_text='Снимите галочку, чтобы скрыть публикацию.',
+        help_text='Снимите галочку, чтобы скрыть модель.',
         verbose_name='Опубликовано'
     )
     created_at = models.DateTimeField(
