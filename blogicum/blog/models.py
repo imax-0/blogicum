@@ -107,9 +107,6 @@ class Post(PublishedModel):
             kwargs={'username': self.author.username}
         )
 
-    def comment_count(self):
-        return Comment.objects.count()
-
 
 class Comment(PublishedModel):
     text = models.TextField('Текст комментария')

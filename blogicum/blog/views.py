@@ -1,33 +1,16 @@
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.shortcuts import get_object_or_404, redirect
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Count
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import (
     CreateView, DeleteView, DetailView, ListView, UpdateView
 )
 from django.views.generic.edit import ModelFormMixin
-from django.views.generic.list import MultipleObjectMixin
 
 import blogicum.constans as const
 from .forms import CommentForm, PostForm
+from .mixins import ChangingCommentMixin, OnlyAuthorMixin
 from .models import Category, Comment, Post, User
-
-
-class OnlyAuthorMixin(UserPassesTestMixin):
-
-    def test_func(self):
-        return self.get_object().author == self.request.user
-
-    def handle_no_permission(self):
-        return redirect('blog:post_detail', post_id=self.get_object().pk)
-
-
-class ChangeObjectMixin:
-
-    def get_success_url(self):
-        return reverse(
-            'blog:post_detail',
-            kwargs={'post_id': self.object.pk}
-        )
 
 
 class CategoryPostsListView(ListView):
@@ -59,13 +42,13 @@ class PostDetailView(DetailView):
     pk_url_kwarg = 'post_id'
 
     def get_object(self):
-        obj = super().get_object()
-        if obj.author != self.request.user:
+        post = super().get_object()
+        if post.author != self.request.user:
             return get_object_or_404(
                 Post.published_posts,
                 pk=self.kwargs.get('post_id', None)
             )
-        return obj
+        return post
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -76,22 +59,20 @@ class PostDetailView(DetailView):
         return context
 
 
-class PostUpdateView(
-    LoginRequiredMixin,
-    OnlyAuthorMixin,
-    ChangeObjectMixin,
-    UpdateView
-):
+class PostUpdateView(OnlyAuthorMixin, UpdateView):
     model = Post
     template_name = 'blog/create.html'
     pk_url_kwarg = 'post_id'
     form_class = PostForm
 
+    def get_success_url(self):
+        return reverse(
+            'blog:post_detail',
+            kwargs={'post_id': self.object.pk}
+        )
 
-class PostDeleteView(LoginRequiredMixin,
-                     OnlyAuthorMixin,
-                     ModelFormMixin,
-                     DeleteView):
+
+class PostDeleteView(OnlyAuthorMixin, ModelFormMixin, DeleteView):
     model = Post
     template_name = 'blog/create.html'
     pk_url_kwarg = 'post_id'
@@ -105,7 +86,9 @@ class PostListView(ListView):
     model = Post
     template_name = 'blog/index.html'
     paginate_by = const.COUNT_POSTS_ON_PAGE
-    queryset = Post.published_posts.all()
+    queryset = Post.published_posts.all().annotate(
+        comment_count=Count('comments')
+    ).order_by('-pub_date', 'title')
 
 
 class PostCreateView(LoginRequiredMixin, CreateView):
@@ -140,27 +123,12 @@ class CommentCreateView(LoginRequiredMixin, CreateView):
         )
 
 
-class CommentUpdateView(
-    LoginRequiredMixin,
-    OnlyAuthorMixin,
-    ChangeObjectMixin,
-    UpdateView
-):
-    model = Comment
-    template_name = 'blog/comment.html'
-    pk_url_kwarg = 'comment_id'
+class CommentUpdateView(OnlyAuthorMixin, ChangingCommentMixin, UpdateView):
     form_class = CommentForm
 
 
-class CommentDeleteView(
-    LoginRequiredMixin,
-    OnlyAuthorMixin,
-    ChangeObjectMixin,
-    DeleteView
-):
-    model = Comment
-    template_name = 'blog/comment.html'
-    pk_url_kwarg = 'comment_id'
+class CommentDeleteView(OnlyAuthorMixin, ChangingCommentMixin, DeleteView):
+    pass
 
 
 class ProfileUpdateView(LoginRequiredMixin, UpdateView):
@@ -178,7 +146,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         )
 
 
-class ProfileDetailView(ListView, MultipleObjectMixin):
+class ProfileDetailView(ListView):
     model = User
     paginate_by = const.COUNT_POSTS_ON_PAGE
     template_name = 'blog/profile.html'
@@ -191,10 +159,14 @@ class ProfileDetailView(ListView, MultipleObjectMixin):
         )
 
     def get_queryset(self):
-        obj = self.get_object()
+        user = self.get_object()
         if self.get_object() == self.request.user:
-            return obj.posts(manager='objects').all()
-        return obj.posts(manager='published_posts').all()
+            return user.posts(manager='objects').all().annotate(
+                comment_count=Count('comments')
+            ).order_by('-pub_date', 'title')
+        return user.posts(manager='published_posts').all().annotate(
+            comment_count=Count('comments')
+        ).order_by('-pub_date', 'title')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
